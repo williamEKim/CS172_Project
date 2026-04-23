@@ -1,9 +1,6 @@
 import praw
 from getpass import getpass
 
-client_id = client_secrete = user_agent = ''
-username = pw = ''
-
 client_id = input('Please Enter Your Reddit Client ID: ')
 client_secrete = input('Please Enter Your Reddit Client Secrete: ')
 user_agent = input('Please Enter Your Reddit User Agent: ')
