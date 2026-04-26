@@ -1,28 +1,30 @@
-import praw
+from Bluesky import login, fetch_posts
 from getpass import getpass
 
-client_id = input('Please Enter Your Reddit Client ID: ')
-client_secrete = input('Please Enter Your Reddit Client Secrete: ')
-user_agent = input('Please Enter Your Reddit User Agent: ')
+# TARGET_SIZE = 500 * 1024 * 1024   # 500MB
+TARGET_SIZE = 3 * 1024 * 1024      # set it to 3MB for now (testing purpose)
+FILE_SIZE_LIMIT = 10 * 1024 * 1024  # 10MB per file
 
-username = input('Please Enter your Reddit Username: ')
-pw = getpass('Please Enter your Reddit user password: ')
+def main():
+    handle = input("Enter your Bluesky handle (e.g. yourname.bsky.social): ")
+    password = getpass("Enter your Bluesky app password: ")
 
+    token = login(handle, password)
+    if not token:
+        return
 
-reddit = praw.Reddit(
-    client_id=client_id,
-    client_secret=client_secrete,
-    user_agent=user_agent,
-    username=username,
-    password=pw
-)
+    query = input("Enter search term: ")
 
-print('\nRead Only Access is Successfully Granted!\n\t' + reddit.read_only)
+    posts = fetch_posts(token, query, TARGET_SIZE)
 
-subreddit = input('Enter the subreddit you want to crawl: ')
+    collected = list(posts)
 
-# obtain 10 “hot” submissions from r/'your input'
-for submission in reddit.subreddit(subreddit).hot(limit=10):
-    print(submission.title)
+    print("Data Collection is completed:")
+    print(f"Data collection completed: {len(collected)} posts fetched")
+    print("\nSample post:")
+    print(collected[0])
 
-# Output: 10 submissions
+    # process_posts() # needs to be implemented
+
+if __name__ == "__main__":
+    main()
