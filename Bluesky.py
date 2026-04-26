@@ -13,6 +13,7 @@ def login(handle, password):
 
     token = auth_response.json()["accessJwt"]
     print("Logged in successfully!")
+    return token
 
 
 
