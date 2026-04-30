@@ -1,9 +1,14 @@
 from Bluesky import login, fetch_posts
+from process import process_post, save_posts
 from getpass import getpass
 
-# TARGET_SIZE = 500 * 1024 * 1024   # 500MB
-TARGET_SIZE = 3 * 1024 * 1024      # set it to 3MB for now (testing purpose)
-FILE_SIZE_LIMIT = 10 * 1024 * 1024  # 10MB per file
+TARGET_SIZE = 500 * 1024 * 1024
+FILE_SIZE_LIMIT = 10 * 1024 * 1024
+
+QUERIES = [
+    "baseball", "football", "hockey", "volleyball", "golf", "cricket", "rugby", "skiing", "snowboarding", "tennis", "boxing", "mma", "wrestling", "cycling",
+    "chess", "esports", "darts", "badminton", "pool", "ice skating", "rowing", "surfing"
+]
 
 def main():
     handle = input("Enter your Bluesky handle (e.g. yourname.bsky.social): ")
@@ -13,18 +18,16 @@ def main():
     if not token:
         return
 
-    query = input("Enter search term: ")
+    output_dir = input("Enter output directory: ")
 
-    posts = fetch_posts(token, query, TARGET_SIZE)
+    for query in QUERIES:
+        print(f"\nStarting query: {query}")
+        raw_posts = fetch_posts(token, query, TARGET_SIZE)
+        processed = (process_post(post) for post in raw_posts)
+        save_posts(processed, output_dir, query)
+        print(f"Finished query: {query}")
 
-    collected = list(posts)
-
-    print("Data Collection is completed:")
-    print(f"Data collection completed: {len(collected)} posts fetched")
-    print("\nSample post:")
-    print(collected[0])
-
-    # process_posts() # needs to be implemented
+    print("\nAll queries done.")
 
 if __name__ == "__main__":
     main()
