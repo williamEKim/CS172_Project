@@ -1,5 +1,7 @@
 import requests
 import time
+import json
+from bs4 import BeautifulSoup
 
 def login(handle, password):
     auth_response = requests.post(
@@ -65,3 +67,71 @@ def fetch_posts(token, query, target_bytes):
             break
 
         time.sleep(0.5)
+
+
+
+def extract_urls(post):
+    urls = []
+
+    facets = post.get("record", {}).get("facets", [])
+    for facet in facets:
+        features = facet.get("features", [])
+        for feature in features:
+            if feature.get("$type") == "app.bsky.richtext.facet#link":
+                urls.append(feature.get("uri"))
+
+    embed = post.get("record", {}).get("embed", {})
+    external = embed.get("external") or post.get("embed", {}).get("external")
+    if external and external.get("uri"):
+        urls.append(external["uri"])
+
+    urls = list(dict.fromkeys(urls))
+
+    post["url_data"] = [
+        {"url": url, "title": None}
+        for url in urls
+    ]
+
+
+
+_url_count = 0
+def fetch_titles(post):
+    global _url_count
+
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
+    url_data = post.get("url_data", [])
+    
+    if url_data:
+        for item in url_data:
+            url = item["url"]
+
+            if not url: # empty url list
+                continue
+
+            if "bit.ly" in url: # short links
+                print("Skipping bit.ly links")
+                continue
+
+            try:
+                page = requests.get(url, timeout=5, headers=headers)
+                soup = BeautifulSoup(page.content, "html.parser")
+                title = soup.title
+                if title:
+                    item["title"] = title.string
+                    _url_count += 1
+                    print(f"Successful URL Count: {_url_count}")
+                else:
+                    # no title for page
+                    item["title"] = None
+
+            except requests.exceptions.Timeout:
+                item["title"] = None
+                print(f"Timeout: {url}")
+                continue
+
+            except requests.exceptions.RequestException as e:
+                print(f"Request Error: {e}")
+     
