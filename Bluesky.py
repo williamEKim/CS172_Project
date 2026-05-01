@@ -88,50 +88,55 @@ def extract_urls(post):
     urls = list(dict.fromkeys(urls))
 
     post["url_data"] = [
-        {"url": url, "title": None}
+        {"url": url, "title": "", "status": 0}
         for url in urls
     ]
 
 
-
 _url_count = 0
-def fetch_titles(post):
+def fetch_titles(processed_posts):
     global _url_count
 
     headers = {
         "User-Agent": "Mozilla/5.0"
     }
 
-    url_data = post.get("url_data", [])
-    
-    if url_data:
-        for item in url_data:
-            url = item["url"]
+    for post in processed_posts:
+        url_data = post.get("url_data", [])
+        
+        if url_data:
+            for item in url_data:
+                url = item["url"]
 
-            if not url: # empty url list
-                continue
+                if not url: # empty url list
+                    continue
 
-            if "bit.ly" in url: # short links
-                print("Skipping bit.ly links")
-                continue
+                if "bit.ly" in url: # short links
+                    print("Skipping bit.ly links")
+                    continue
 
-            try:
-                page = requests.get(url, timeout=5, headers=headers)
-                soup = BeautifulSoup(page.content, "html.parser")
-                title = soup.title
-                if title:
-                    item["title"] = title.string
-                    _url_count += 1
-                    print(f"Successful URL Count: {_url_count}")
-                else:
-                    # no title for page
-                    item["title"] = None
+                try:
+                    page = requests.get(url, timeout=5, headers=headers)
+                    soup = BeautifulSoup(page.content, "html.parser")
+                    title = soup.title
+                    if title:
+                        item["status"] = 1
+                        item["title"] = title.string
+                        _url_count += 1
+                        print(f"Successful URL Count: {_url_count}")
+                    else:
+                        # no title for page
+                        item["status"] = 0
+                        item["title"] = ""
 
-            except requests.exceptions.Timeout:
-                item["title"] = None
-                print(f"Timeout: {url}")
-                continue
+                except requests.exceptions.Timeout:
+                    item["status"] = 0
+                    item["title"] = ""
+                    print(f"Timeout: {url}")
+                    continue
 
-            except requests.exceptions.RequestException as e:
-                print(f"Request Error: {e}")
+                except requests.exceptions.RequestException as e:
+                    item["status"] = 0
+                    item["title"] = ""
+                    print(f"Request Error: {e}")
      
