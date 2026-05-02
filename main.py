@@ -1,4 +1,4 @@
-from Bluesky import login, fetch_posts, extract_urls, fetch_titles, store_posts
+from Bluesky import login, fetch_posts, extract_urls, fetch_titles
 from process import process_post, save_posts
 from getpass import getpass
 import os
