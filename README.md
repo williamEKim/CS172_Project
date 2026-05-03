@@ -4,6 +4,17 @@ A Python tool to search and collect posts from Bluesky using the AT Protocol API
 
 ## Setup
 
+### Execute Crawler Script
+```bash
+# Windows
+./crawler.bat
+
+# Mac/Linux
+source cralwer.sh
+```
+this will execute everything at once, or you can choose to manually execute the program
+
+### Manual Execution:
 ### 1. Create and activate a virtual environment
 
 ```bash
