@@ -1,6 +1,6 @@
 import requests
 import time
-import json
+import json, os
 from bs4 import BeautifulSoup
 
 def login(handle, password):
@@ -19,7 +19,7 @@ def login(handle, password):
 
 
 
-def fetch_posts(token, query, target_bytes):
+def fetch_posts(token, query, target_bytes, handle, password):
     # without headers, API request returned 403 Forbidden
     headers = {
         "Authorization": f"Bearer {token}",
@@ -44,7 +44,24 @@ def fetch_posts(token, query, target_bytes):
         )
 
         if response.status_code != 200:
-            print("Error:", response.text)
+            try:
+                error = response.json()
+            except:
+                print("Error:", response.text)
+                break
+
+            if error.get("error") == "ExpiredToken":
+                print("Token expired. Re-authenticating...")
+
+                if not handle or not password:
+                    raise Exception("Failed to retrieve credentials")
+                
+                token = login(handle, password)
+                headers["Authorization"] = f"Bearer {token}"
+
+                continue
+
+            print("Error:", error)
             break
 
         data = response.json()
@@ -78,60 +95,105 @@ def extract_urls(post):
         features = facet.get("features", [])
         for feature in features:
             if feature.get("$type") == "app.bsky.richtext.facet#link":
-                urls.append(feature.get("uri"))
+                try:
+                    urls.append(feature.get("uri"))
+                except:
+                    print("Cannot extract url")
 
     embed = post.get("record", {}).get("embed", {})
     external = embed.get("external") or post.get("embed", {}).get("external")
     if external and external.get("uri"):
-        urls.append(external["uri"])
+        try:
+            urls.append(external["uri"])
+        except:
+            print("Cannot extract url")
 
     urls = list(dict.fromkeys(urls))
 
     post["url_data"] = [
-        {"url": url, "title": None}
+        {"url": url, "title": "", "status": 0}
         for url in urls
     ]
 
 
-
 _url_count = 0
-def fetch_titles(post):
+def fetch_titles(processed_posts):
     global _url_count
 
     headers = {
         "User-Agent": "Mozilla/5.0"
     }
 
-    url_data = post.get("url_data", [])
+    for post in processed_posts:
+        url_data = post.get("url_data", [])
+        
+        if url_data:
+            for item in url_data:
+                try:
+                    url = item["url"]
+
+                    if not url: # empty url list
+                        continue
+
+                    if "bit.ly" in url: # short links
+                        print("Skipping bit.ly links")
+                        continue
+
+                    try:
+                        with requests.get(url, timeout=(3, 5), headers=headers) as page:
+
+                            if page.status_code != 200:
+                                item["status"] = 0
+                                item["title"] = ""
+                                continue
+
+                            content_type = page.headers.get("Content-Type", "")
+
+                            if "text/html" not in content_type:
+                                item["status"] = 0
+                                item["title"] = ""
+                                continue
+
+                            soup = BeautifulSoup(page.content, "html.parser")
+                            title = soup.title
+                            
+                            if title and title.string:
+                                item["status"] = 1
+                                item["title"] = title.string
+                                # _url_count += 1
+                                # print(f"Successful URL Count: {_url_count}")
+                            else:
+                                # no title for page
+                                item["status"] = 0
+                                item["title"] = ""
+                        
+                        time.sleep(0.2)
+
+                    except requests.exceptions.Timeout:
+                        item["status"] = 0
+                        item["title"] = ""
+                        print(f"Timeout: {url}")
+                        continue
+
+                    except requests.exceptions.RequestException as e:
+                        item["status"] = 0
+                        item["title"] = ""
+                        print(f"Request Error: {e}, URL: {url}")
+                        continue
+
+                    except Exception as e:
+                        item["status"] = 0
+                        item["title"] = ""
+                        print(f"Parsing Error: {e}, URL: {url}")
+                        continue
+                    
+                except Exception as e:
+                    item["status"] = 0
+                    item["title"] = ""
+                    print(f"Error: {e}")
+                    continue
+
+
+
+
     
-    if url_data:
-        for item in url_data:
-            url = item["url"]
-
-            if not url: # empty url list
-                continue
-
-            if "bit.ly" in url: # short links
-                print("Skipping bit.ly links")
-                continue
-
-            try:
-                page = requests.get(url, timeout=5, headers=headers)
-                soup = BeautifulSoup(page.content, "html.parser")
-                title = soup.title
-                if title:
-                    item["title"] = title.string
-                    _url_count += 1
-                    print(f"Successful URL Count: {_url_count}")
-                else:
-                    # no title for page
-                    item["title"] = None
-
-            except requests.exceptions.Timeout:
-                item["title"] = None
-                print(f"Timeout: {url}")
-                continue
-
-            except requests.exceptions.RequestException as e:
-                print(f"Request Error: {e}")
-     

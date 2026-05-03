@@ -6,7 +6,7 @@ FIELDS = [
     "url", "author_did", "author_handle", "author_display_name",
     "created_at", "indexed_at", "text", "langs",
     "like_count", "repost_count", "reply_count", "quote_count",
-    "is_reply", "reply_parent_uri", "embed_title", "embed_url"
+    "is_reply", "reply_parent_uri", "url_data"
 ]
 
 def process_post(post):
@@ -31,8 +31,7 @@ def process_post(post):
         "quote_count": post.get("quoteCount", 0),
         "is_reply": reply is not None,
         "reply_parent_uri": reply["parent"]["uri"] if reply else None,
-        "embed_title": external.get("title"),
-        "embed_url": external.get("url"),
+        "url_data": post.get("url_data")
     }
 
 def save_posts(processedPosts, output, query):
