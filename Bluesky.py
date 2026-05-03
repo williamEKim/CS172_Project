@@ -2,8 +2,6 @@ import requests
 import time
 import json, os
 from bs4 import BeautifulSoup
-from urllib.robotparser import RobotFileParser
-from urllib.parse import urlparse
 
 def login(handle, password):
     auth_response = requests.post(
