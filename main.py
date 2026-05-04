@@ -8,7 +8,8 @@ TARGET_SIZE = 500 * 1024 * 1024
 FILE_SIZE_LIMIT = 10 * 1024 * 1024
 
 QUERIES = [
-    "darts", "badminton", "pool", "ice skating", "rowing", "surfing"
+    "baseball", "football", "hockey", "volleyball", "golf", "cricket", "rugby", "skiing", "snowboarding", "tennis", "boxing", "mma", "wrestling", "cycling",
+    "chess", "esports", "darts", "badminton", "pool", "ice skating", "rowing", "surfing"
 ]
 
 
