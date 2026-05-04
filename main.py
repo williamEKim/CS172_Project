@@ -11,8 +11,6 @@ QUERIES = [
     "chess", "esports", "darts", "badminton", "pool", "ice skating", "rowing", "surfing"
 ]
 
-OUTPUT_DIR="./RAW_Data"
-
 def main():
     handle = input("Enter your Bluesky handle (e.g. yourname.bsky.social): ")
     password = getpass("Enter your Bluesky app password: ")
