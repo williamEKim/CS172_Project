@@ -73,7 +73,7 @@ The scraper collects up to 500MB of posts and saves them in 10MB chunks:
 | File | Description |
 |------|-------------|
 | `/raw/raw_{query}.jsonl` | unprocessed raw JSON |
-| `bluesky_{query}_{n}.jsonl` | Raw JSON, one post per line |
+| `bluesky_{query}_{n}.jsonl` | JSON, one post per line |
 | `bluesky_{query}_{n}.csv` | Spreadsheet-friendly format |
 
 ---
