@@ -15,9 +15,10 @@ def process_post(post):
     reply = record.get("reply")
     embed = record.get("embed") or {}
     external = embed.get("external", {}) or {}
+    url_data = post.get("url_data", [])
 
     return {
-        "url": post.get("url"),
+        "url": url_data[0]["url"] if url_data else None,
         "author_did": author.get("did"),
         "author_handle": author.get("handle"),
         "author_display_name": author.get("displayName"),
@@ -31,8 +32,15 @@ def process_post(post):
         "quote_count": post.get("quoteCount", 0),
         "is_reply": reply is not None,
         "reply_parent_uri": reply["parent"]["uri"] if reply else None,
-        "url_data": post.get("url_data")
+        "url_data": url_data
     }
+
+def save_raw_posts(posts, raw_dir, query):
+    os.makedirs(raw_dir, exist_ok=True)
+    path = os.path.join(raw_dir, f"raw_{query}.jsonl")
+    with open(path, "w", encoding="utf-8") as f:
+        for post in posts:
+            f.write(json.dumps(post) + "\n")
 
 def save_posts(processedPosts, output, query):
     os.makedirs(output, exist_ok=True)
