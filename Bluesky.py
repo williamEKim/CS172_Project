@@ -1,6 +1,9 @@
 import requests
 import time
 import json, os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
 def login(handle, password):
@@ -116,84 +119,148 @@ def extract_urls(post):
     ]
 
 
-_url_count = 0
-def fetch_titles(processed_posts):
-    global _url_count
+
+def fetch_title_for_item(item, headers, total_urls, progress, lock, domain_lock, domain_next_available, min_delay):
+    url = item.get("url")
+
+    with lock:
+        progress["count"] += 1
+        current = progress["count"]
+
+    print(f"\n{current}/{total_urls} Processing URL: {url}")
+
+    parsed = urlparse(url or "")
+    domain = parsed.netloc.lower() if parsed.netloc else None
+    if domain:
+        with domain_lock:
+            now = time.time()
+            available_at = domain_next_available.get(domain, now)
+            if available_at > now:
+                wait = available_at - now
+                domain_next_available[domain] = available_at + min_delay
+            else:
+                wait = 0
+                domain_next_available[domain] = now + min_delay
+        if wait > 0:
+            print(f"Waiting {wait:.2f}s before requesting {domain}")
+            time.sleep(wait)
+
+    if not url:
+        item["status"] = 0
+        item["title"] = ""
+        return
+
+    if "bit.ly" in url:
+        print("Skipping bit.ly links")
+        item["status"] = 0
+        item["title"] = ""
+        return
+
+    try:
+        t0 = time.time()
+        print(" START CONNECTION")
+
+        response = requests.get(
+            url,
+            timeout=(3, 5),
+            headers=headers,
+            allow_redirects=True,
+            stream=True
+        )
+
+        print(f" CONNECTION FINISHED ({time.time() - t0:.2f}s)")
+        print(" STATUS:", response.status_code)
+
+        if response.status_code != 200:
+            item["status"] = 0
+            item["title"] = ""
+            return
+
+        t1 = time.time()
+        content_type = response.headers.get("Content-Type", "")
+        print(f" HEADERS READ ({time.time() - t1:.2f}s)")
+
+        if "text/html" not in content_type:
+            item["status"] = 0
+            item["title"] = ""
+            return
+
+        t2 = time.time()
+        print(" READING BODY")
+
+        html = response.content
+        print(f" BODY READ ({time.time() - t2:.2f}s)")
+
+        soup = BeautifulSoup(html, "html.parser")
+        title = soup.title
+
+        if title and title.string:
+            item["status"] = 1
+            item["title"] = title.string.strip()
+        else:
+            item["status"] = 0
+            item["title"] = ""
+
+    except requests.exceptions.Timeout:
+        print(f"TIMEOUT: {url}")
+        item["status"] = 0
+        item["title"] = ""
+
+    except requests.exceptions.RequestException as e:
+        print(f"REQUEST ERROR: {e}, URL: {url}")
+        item["status"] = 0
+        item["title"] = ""
+
+    except Exception as e:
+        print(f"PARSE ERROR: {e}, URL: {url}")
+        item["status"] = 0
+        item["title"] = ""
+
+    finally:
+        try:
+            if "response" in locals():
+                response.close()
+        except Exception:
+            pass
+        time.sleep(0.2)
+
+
+
+def fetch_titles(processed_posts, max_workers=15, min_delay=0.5):
+    total_urls = sum(len(p.get("url_data", [])) for p in processed_posts)
+    if total_urls == 0:
+        print("No URLs found to process")
+        return
 
     headers = {
         "User-Agent": "Mozilla/5.0"
     }
 
-    for post in processed_posts:
-        url_data = post.get("url_data", [])
-        
-        if url_data:
-            for item in url_data:
-                try:
-                    url = item["url"]
+    progress = {"count": 0}
+    lock = Lock()
+    domain_lock = Lock()
+    domain_next_available = {}
+    tasks = []
 
-                    if not url: # empty url list
-                        continue
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for post in processed_posts:
+            for item in post.get("url_data", []):
+                tasks.append(
+                    executor.submit(
+                        fetch_title_for_item,
+                        item,
+                        headers,
+                        total_urls,
+                        progress,
+                        lock,
+                        domain_lock,
+                        domain_next_available,
+                        min_delay
+                    )
+                )
 
-                    if "bit.ly" in url: # short links
-                        print("Skipping bit.ly links")
-                        continue
-
-                    try:
-                        with requests.get(url, timeout=(3, 5), headers=headers) as page:
-
-                            if page.status_code != 200:
-                                item["status"] = 0
-                                item["title"] = ""
-                                continue
-
-                            content_type = page.headers.get("Content-Type", "")
-
-                            if "text/html" not in content_type:
-                                item["status"] = 0
-                                item["title"] = ""
-                                continue
-
-                            soup = BeautifulSoup(page.content, "html.parser")
-                            title = soup.title
-                            
-                            if title and title.string:
-                                item["status"] = 1
-                                item["title"] = title.string
-                                # _url_count += 1
-                                # print(f"Successful URL Count: {_url_count}")
-                            else:
-                                # no title for page
-                                item["status"] = 0
-                                item["title"] = ""
-                        
-                        time.sleep(0.2)
-
-                    except requests.exceptions.Timeout:
-                        item["status"] = 0
-                        item["title"] = ""
-                        print(f"Timeout: {url}")
-                        continue
-
-                    except requests.exceptions.RequestException as e:
-                        item["status"] = 0
-                        item["title"] = ""
-                        print(f"Request Error: {e}, URL: {url}")
-                        continue
-
-                    except Exception as e:
-                        item["status"] = 0
-                        item["title"] = ""
-                        print(f"Parsing Error: {e}, URL: {url}")
-                        continue
-                    
-                except Exception as e:
-                    item["status"] = 0
-                    item["title"] = ""
-                    print(f"Error: {e}")
-                    continue
-
-
-
-
-    
+        for future in as_completed(tasks):
+            try:
+                future.result()
+            except Exception as exc:
+                print(f"Unexpected error in title worker: {exc}")
