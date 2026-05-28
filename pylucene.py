@@ -1,0 +1,146 @@
+import lucene
+import os, shutil, json
+from java.nio.file import Paths
+from org.apache.lucene.analysis.standard import StandardAnalyzer
+from org.apache.lucene.document import Document, Field, FieldType
+from org.apache.lucene.index import IndexWriter, IndexWriterConfig, IndexOptions, DirectoryReader
+from org.apache.lucene.store import NIOFSDirectory
+from org.apache.lucene.search import IndexSearcher
+from org.apache.lucene.queryparser.classic import QueryParser
+
+posts = []
+
+DATA_DIR = "processed"
+
+for filename in os.listdir(DATA_DIR):
+    if filename.endswith(".jsonl"):
+        filepath = os.path.join(DATA_DIR, filename)
+        print(f"Loading {filepath}")
+
+        with open(filepath, "r", encoding="utf-8") as file:
+            for line in file:
+                try:
+                    posts.append(json.loads(line))
+                except Exception as e:
+                    print(f"Skipping line {e}")
+
+print(f"Loaded {len(posts)} total posts")
+
+def create_index(index_dir, posts):
+    if os.path.exists(index_dir):
+        shutil.rmtree(index_dir)
+    os.makedirs(index_dir)
+
+    store = NIOFSDirectory(Paths.get(index_dir))
+    analyzer = StandardAnalyzer()
+    config = IndexWriterConfig(analyzer)
+    config.setOpenMode(IndexWriterConfig.OpenMode.CREATE)
+    writer = IndexWriter(store, config)
+
+    meta_type = FieldType()
+    meta_type.setStored(True)
+    meta_type.setTokenized(False)
+
+    text_type = FieldType()
+    text_type.setStored(True)
+    text_type.setTokenized(True)
+    text_type.setIndexOptions(IndexOptions.DOCS_AND_FREQS_AND_POSITIONS)
+
+    for post in posts:
+        doc = Document()
+        doc.add(Field("url", str(post.get("url") or ""), meta_type))
+        doc.add(Field("author_did", str(post.get("author_did") or ""), meta_type))
+        doc.add(Field("author_handle", str(post.get("author_handle") or ""), meta_type))
+        doc.add(Field("author_display_name", str(post.get("author_display_name") or ""), text_type))
+        doc.add(Field("created_at", str(post.get("created_at") or ""), meta_type))
+        doc.add(Field("indexed_at", str(post.get("indexed_at") or ""), meta_type))
+        doc.add(Field("text", str(post.get("text") or ""), text_type))
+
+        for item in post.get("langs", []):
+            doc.add(Field("langs", item, meta_type))
+
+        doc.add(Field("like_count", str(post.get("like_count", 0)), meta_type))
+        doc.add(Field("repost_count", str(post.get("repost_count", 0)), meta_type))
+        doc.add(Field("reply_count", str(post.get("reply_count", 0)), meta_type))
+        doc.add(Field("quote_count", str(post.get("quote_count", 0)), meta_type))
+        doc.add(Field("is_reply", str(post.get("is_reply", False)), meta_type))
+        doc.add(Field("reply_parent_uri", str(post.get("reply_parent_uri") or ""), meta_type))
+
+        for item in post.get("url_data", []):
+            if item.get("title"):
+                doc.add(Field("link_title", str(item.get("title") or ""), text_type))
+            doc.add(Field("link_url", str(item.get("url") or ""), meta_type))
+            doc.add(Field("link_status", str(item.get("status", 0)), meta_type))
+        
+        writer.addDocument(doc)
+
+    writer.commit()
+    writer.close()
+    print(f"Indexed {len(posts)} documents to {index_dir}")
+
+def search(store_dir, query):
+    store = NIOFSDirectory(Paths.get(store_dir))
+    reader = DirectoryReader.open(store)
+    searcher = IndexSearcher(reader)
+
+    parser = QueryParser("text", StandardAnalyzer())
+    parsed_query = parser.parse(query)
+
+    top_docs = searcher.search(parsed_query, 10).scoreDocs
+    top_k_docs = []
+
+    for hit in top_docs:
+        doc = searcher.doc(hit.doc)
+        top_k_docs.append({
+            "score": hit.score,
+            "url": doc.get("url"),
+            "author_did": doc.get("author_did"),
+            "author_handle": doc.get("author_handle"),
+            "author_display_name": doc.get("author_display_name"),
+            "created_at": doc.get("created_at"),
+            "indexed_at": doc.get("indexed_at"),
+            "text": doc.get("text"),
+            "langs": list(doc.getValues("langs")),
+            "like_count": doc.get("like_count"),
+            "repost_count": doc.get("repost_count"),
+            "reply_count": doc.get("reply_count"),
+            "quote_count": doc.get("quote_count"),
+            "is_reply": doc.get("is_reply"),
+            "reply_parent_uri": doc.get("reply_parent_uri"),
+            "title_list": list(doc.getValues("link_title")),
+            "url_list": list(doc.getValues("link_url")),
+            "status_list": list(doc.getValues("link_status"))
+        })
+    reader.close()
+    # print(top_k_docs)
+    return top_k_docs
+
+def show(results, query):
+    print(f"\n   Query: {query!r}    ({len(results)} results)")
+    print("-" * 78)
+    for i, r in enumerate(results, 1):
+        print(f"{i}.  Score: {r['score']:.3f}")
+        print(f"URL: {r['url']}")
+        print(f"Author DID: {r['author_did']}")
+        print(f"Author Handle: {r['author_handle']}")
+        print(f"Author Display Name: {r['author_display_name']}")
+        print(f"Created At: {r['created_at']}")
+        print(f"Indexed at: {r['indexed_at']}")
+        print(f"Text: {r['text']}")
+        print(f"Langs: {r['langs']}")
+        print(f"Like Count: {r['like_count']}")
+        print(f"Repost Count: {r['repost_count']}")
+        print(f"Reply Count: {r['reply_count']}")
+        print(f"Quote Count: {r['quote_count']}")
+        print(f"Is Reply: {r['is_reply']}")
+        print(f"Reply Parent URI: {r['reply_parent_uri']}")
+        print(f"Title List: {r['title_list']}")
+        print(f"URL List: {r['url_list']}")
+        print(f"Status List: {r['status_list']}\n")
+
+
+lucene.initVM(vmargs=['-Djava.awt.headless=true'])
+INDEX_DIR = "bluesky_index"
+create_index(INDEX_DIR, posts)
+query = "darts tournament"
+show(search(INDEX_DIR, query), query)
