@@ -1,8 +1,9 @@
 import lucene
 import os, shutil, json
+from datetime import datetime, timezone
 from java.nio.file import Paths
 from org.apache.lucene.analysis.standard import StandardAnalyzer
-from org.apache.lucene.document import Document, Field, FieldType
+from org.apache.lucene.document import Document, Field, FieldType, LongPoint, IntPoint, StoredField  
 from org.apache.lucene.index import IndexWriter, IndexWriterConfig, IndexOptions, DirectoryReader
 from org.apache.lucene.store import NIOFSDirectory
 from org.apache.lucene.search import IndexSearcher
@@ -25,6 +26,16 @@ for filename in os.listdir(DATA_DIR):
                     print(f"Skipping line {e}")
 
 print(f"Loaded {len(posts)} total posts")
+
+def parse_epoch(iso_str):
+    if not iso_str:
+        return 0
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return int(dt.timestamp())
+    except ValueError:
+        return 0
+
 
 def create_index(index_dir, posts):
     if os.path.exists(index_dir):
@@ -71,7 +82,18 @@ def create_index(index_dir, posts):
                 doc.add(Field("link_title", str(item.get("title") or ""), text_type))
             doc.add(Field("link_url", str(item.get("url") or ""), meta_type))
             doc.add(Field("link_status", str(item.get("status", 0)), meta_type))
-        
+
+        # LongPoint indexes the value for range queries; StoredField lets us retrieve it later
+        epoch = parse_epoch(post.get("created_at"))
+        doc.add(LongPoint("created_at_epoch", epoch))
+        doc.add(StoredField("created_at_epoch", epoch))
+
+        # We keep the original string fields above for display; these are for numeric operations
+        doc.add(IntPoint("like_count_int", int(post.get("like_count", 0))))
+        doc.add(IntPoint("repost_count_int", int(post.get("repost_count", 0))))
+        doc.add(IntPoint("reply_count_int", int(post.get("reply_count", 0))))
+        doc.add(IntPoint("quote_count_int", int(post.get("quote_count", 0))))
+
         writer.addDocument(doc)
 
     writer.commit()
@@ -90,7 +112,7 @@ def search(store_dir, query):
     top_k_docs = []
 
     for hit in top_docs:
-        doc = searcher.doc(hit.doc)
+        doc = searcher.storedFields().document(hit.doc)
         top_k_docs.append({
             "score": hit.score,
             "url": doc.get("url"),
@@ -112,7 +134,6 @@ def search(store_dir, query):
             "status_list": list(doc.getValues("link_status"))
         })
     reader.close()
-    # print(top_k_docs)
     return top_k_docs
 
 def show(results, query):
