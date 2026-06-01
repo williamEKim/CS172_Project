@@ -1,4 +1,4 @@
-# CS166 Project — Social Media Post Scraper
+# CS172 Project — Social Media Post Scraper
 Sports and social media are an integral part of American culture. However, with busy schedules and a demand for faster-paced content consumption, consuming long pieces of information can be tiresome for many. This project aims to solve this problem by using LLMs to transform large clusters of sports-related information into bite-sized bits that are easier to comprehend. In other words, we aim to build a crawler that collects sports-related information from BlueSky and then uses a reliable and fast LLM to summarize these posts. 
 
 ---
