@@ -7,10 +7,8 @@ from org.apache.lucene.analysis.standard import StandardAnalyzer
 from org.apache.lucene.document import Document, Field, FieldType, LongPoint, IntPoint, StoredField  
 from org.apache.lucene.index import IndexWriter, IndexWriterConfig, IndexOptions, DirectoryReader
 from org.apache.lucene.store import NIOFSDirectory
-from org.apache.lucene.search import IndexSearcher
-from org.apache.lucene.queryparser.classic import QueryParser
-from org.apache.lucene.search import IndexSearcher, BooleanClause
-from org.apache.lucene.queryparser.classic import MultiFieldQueryParser
+from org.apache.lucene.search import IndexSearcher, BooleanClause, BooleanQuery, MatchAllDocsQuery
+from org.apache.lucene.queryparser.classic import QueryParser, MultiFieldQueryParser
 
 
 program_start = time.time()
@@ -114,10 +112,11 @@ def search(store_dir, query):
     parsed_query = parser.parse(query)
 
     top_docs = searcher.search(parsed_query, 10).scoreDocs
+    stored_fields = searcher.storedFields()
     top_k_docs = []
 
     for hit in top_docs:
-        doc = searcher.doc(hit.doc)
+        doc = stored_fields.document(hit.doc)
         top_k_docs.append({
             "score": hit.score,
             "url": doc.get("url"),
@@ -155,9 +154,10 @@ def multifield_search(index_dir, query):
 
     top_docs = searcher.search(parsed_query, 10).scoreDocs
 
+    stored_fields = searcher.storedFields()
     top_k_docs = []
     for hit in top_docs:
-        doc = searcher.doc(hit.doc)
+        doc = stored_fields.document(hit.doc)
         top_k_docs.append({
             "score": hit.score,
             "url": doc.get("url"),
@@ -184,6 +184,82 @@ def multifield_search(index_dir, query):
     return top_k_docs
 
 
+def advanced_search(index_dir, query_str, mode="multi", sort_by="score",
+                    min_likes=0, min_reposts=0, date_from=None, date_to=None, limit=50):
+    store = NIOFSDirectory(Paths.get(index_dir))
+    reader = DirectoryReader.open(store)
+    searcher = IndexSearcher(reader)
+
+    MUST = BooleanClause.Occur.MUST
+    FILTER = BooleanClause.Occur.FILTER
+    builder = BooleanQuery.Builder()
+
+    if query_str.strip():
+        if mode == "multi":
+            fields = ["author_display_name", "text", "link_title"]
+            SHOULD = BooleanClause.Occur.SHOULD
+            text_q = MultiFieldQueryParser.parse(
+                query_str, fields, [SHOULD, SHOULD, SHOULD], StandardAnalyzer()
+            )
+        else:
+            text_q = QueryParser("text", StandardAnalyzer()).parse(query_str)
+        builder.add(text_q, MUST)
+    else:
+        builder.add(MatchAllDocsQuery(), MUST)
+
+    if date_from or date_to:
+        lo = parse_epoch(date_from + "T00:00:00Z") if date_from else 0
+        hi = parse_epoch(date_to + "T23:59:59Z") if date_to else 9223372036854775807
+        builder.add(LongPoint.newRangeQuery("created_at_epoch", lo, hi), FILTER)
+
+    if min_likes > 0:
+        builder.add(IntPoint.newRangeQuery("like_count_int", min_likes, 2147483647), FILTER)
+
+    if min_reposts > 0:
+        builder.add(IntPoint.newRangeQuery("repost_count_int", min_reposts, 2147483647), FILTER)
+
+    top_docs = searcher.search(builder.build(), limit).scoreDocs
+
+    stored_fields = searcher.storedFields()
+    results = []
+    for hit in top_docs:
+        doc = stored_fields.document(hit.doc)
+        results.append({
+            "score": hit.score,
+            "url": doc.get("url"),
+            "author_did": doc.get("author_did"),
+            "author_handle": doc.get("author_handle"),
+            "author_display_name": doc.get("author_display_name"),
+            "created_at": doc.get("created_at"),
+            "indexed_at": doc.get("indexed_at"),
+            "text": doc.get("text"),
+            "langs": list(doc.getValues("langs")),
+            "like_count": doc.get("like_count"),
+            "repost_count": doc.get("repost_count"),
+            "reply_count": doc.get("reply_count"),
+            "quote_count": doc.get("quote_count"),
+            "is_reply": doc.get("is_reply"),
+            "reply_parent_uri": doc.get("reply_parent_uri"),
+            "title_list": list(doc.getValues("link_title")),
+            "url_list": list(doc.getValues("link_url")),
+            "status_list": list(doc.getValues("link_status")),
+            "created_at_epoch": doc.get("created_at_epoch"),
+        })
+
+    reader.close()
+
+    if sort_by == "date":
+        results.sort(key=lambda x: int(x["created_at_epoch"] or 0), reverse=True)
+    elif sort_by == "likes":
+        results.sort(key=lambda x: int(x["like_count"] or 0), reverse=True)
+    elif sort_by == "reposts":
+        results.sort(key=lambda x: int(x["repost_count"] or 0), reverse=True)
+    else:
+        results.sort(key=lambda x: (x["score"], int(x["created_at_epoch"] or 0)), reverse=True)
+
+    return results
+
+
 def show(results, query):
     print(f"\n   Query: {query!r}    ({len(results)} results)")
     print("-" * 78)
@@ -208,27 +284,28 @@ def show(results, query):
         print(f"Status List: {r['status_list']}\n")
 
 
-lucene.initVM(vmargs=['-Djava.awt.headless=true'])
-INDEX_DIR = "bluesky_index"
-DATA_DIR = "processed"
-query = "volleyball tournament"
+if __name__ == "__main__":
+    lucene.initVM(vmargs=['-Djava.awt.headless=true'])
+    INDEX_DIR = "bluesky_index"
+    DATA_DIR = "processed"
+    query = "volleyball tournament"
 
-if not os.path.exists(INDEX_DIR):
-    load_start = time.time()
-    posts = load_posts(DATA_DIR)
-    print(f"Loaded {len(posts)} total posts")
-    print(f"Loading took {time.time() - load_start:.2f} seconds")
+    if not os.path.exists(INDEX_DIR):
+        load_start = time.time()
+        posts = load_posts(DATA_DIR)
+        print(f"Loaded {len(posts)} total posts")
+        print(f"Loading took {time.time() - load_start:.2f} seconds")
 
-    index_start = time.time()
-    create_index(INDEX_DIR, posts)
-    print(f"Indexing took {time.time() - index_start:.2f} seconds")
-else:
-    print("Using existing index")
+        index_start = time.time()
+        create_index(INDEX_DIR, posts)
+        print(f"Indexing took {time.time() - index_start:.2f} seconds")
+    else:
+        print("Using existing index")
 
-search_start = time.time()
-results = search(INDEX_DIR, query)
-# results = multifield_search(INDEX_DIR, query)
-print(f"Search took {time.time() - search_start:.4f} seconds")
+    search_start = time.time()
+    results = search(INDEX_DIR, query)
+    # results = multifield_search(INDEX_DIR, query)
+    print(f"Search took {time.time() - search_start:.4f} seconds")
 
-show(results, query)
-print(f"Total runtime: {time.time() - program_start:.2f} seconds")
+    show(results, query)
+    print(f"Total runtime: {time.time() - program_start:.2f} seconds")
