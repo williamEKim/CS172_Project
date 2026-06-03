@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bluesky Sports Search</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+    <h1>Bluesky Sports Search</h1>
+    <p>Search posts collected across 22 sports topics</p>
+</header>
+
+<main>
+    <div class="search-panel">
+        <form id="search-form" autocomplete="off">
+            <div class="search-bar">
+                <input
+                    type="text"
+                    id="query"
+                    placeholder="e.g. volleyball tournament, NBA trade…"
+                    spellcheck="false"
+                >
+                <button type="submit" id="submit-btn">Search</button>
+            </div>
+
+            <div class="options-row">
+                <div class="option-group">
+                    <label for="mode">Search across</label>
+                    <select id="mode">
+                        <option value="multi">Post text + author + link titles</option>
+                        <option value="text">Post text only</option>
+                    </select>
+                </div>
+                <div class="option-group">
+                    <label for="sort">Sort by</label>
+                    <select id="sort">
+                        <option value="score">Relevance</option>
+                        <option value="date">Most recent</option>
+                        <option value="likes">Most liked</option>
+                        <option value="reposts">Most reposted</option>
+                    </select>
+                </div>
+            </div>
+
+            <details class="filters">
+                <summary>Advanced filters</summary>
+                <div class="filter-grid">
+                    <div class="filter-group">
+                        <label for="min_likes">Min likes</label>
+                        <input type="number" id="min_likes" min="0" value="0">
+                    </div>
+                    <div class="filter-group">
+                        <label for="min_reposts">Min reposts</label>
+                        <input type="number" id="min_reposts" min="0" value="0">
+                    </div>
+                    <div class="filter-group">
+                        <label for="date_from">From date</label>
+                        <input type="date" id="date_from">
+                    </div>
+                    <div class="filter-group">
+                        <label for="date_to">To date</label>
+                        <input type="date" id="date_to">
+                    </div>
+                </div>
+            </details>
+        </form>
+    </div>
+
+    <div id="results-header"></div>
+    <div id="results-list"></div>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
