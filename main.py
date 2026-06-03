@@ -4,7 +4,8 @@ from getpass import getpass
 import requests
 import json
 import os
-
+import glob
+import time 
 
 TARGET_SIZE = 500 * 1024 * 1024
 FILE_SIZE_LIMIT = 10 * 1024 * 1024
@@ -18,25 +19,18 @@ GeminiAPI = ( "https://generativelanguage.googleapis.com/v1beta/models/"
     "gemini-2.0-flash:generateContent"
 )
 
-def summarize(apiKey, query, posts: list[dict]) -> str:
-    lines = []
-    charsCount = 0
-
-    for i, post in enumerate(posts,1):
-        text = (post.get("text") or "").strip()
-        if not text:
-            continue
-        entry = f"{i}. {text}"
-        if charsCount +len(entry) > 40000:
-            break
-        lines.append(entry)
-        charsCount += len(entry)
-
-    if not lines:
+def summarize(apiKey, post: dict) -> str:
+    text = (post.get("text") or "").strip()
+    if not text:
         return "No text to summarize"
     
-    postBlock = "\n".join(lines)
-    prompt = (f"Summarize the most important parts of the following posts about {query} in 5 bulletpoints:\n\n{postBlock}")
+
+    urlTitles = [item["title"] for item in post.get("url_data",[]) if item.get("title")]
+    context = ("\nLinked pages: " + "; ".join(urlTitles)) if urlTitles else ""
+
+    prompt = (f"Summarize the most important parts of the following sports related post in 5 bulletpoints:"
+              f"Make the reply only the summary and nothing else \n\n"
+              f"Post: {text}{context}\n")
 
     payload = {
         "contents": [
@@ -48,7 +42,7 @@ def summarize(apiKey, query, posts: list[dict]) -> str:
         response = requests.post(
             GeminiAPI,
             params = {"key": apiKey},
-            headers={"Content_type": "application/json"},
+            headers={"Content-Type": "application/json"},
             json = payload,
             timeout = 60
         )
@@ -57,7 +51,7 @@ def summarize(apiKey, query, posts: list[dict]) -> str:
         data = response.json()
 
         summary = (
-            data.get("choices", [{}])[0]
+            data.get("candidates", [{}])[0]
             .get("content", {})
             .get("parts", [{}])[0]
             .get("text", "")
@@ -76,54 +70,110 @@ def summarize(apiKey, query, posts: list[dict]) -> str:
         return f"Response parsing error: {str(e)}"
     
 
-def saveSummary(summary: str, output_dir: str, query: str):
+def saveSummary(posts: list[dict], output_dir: str, query: str):
     summary_dir = os.path.join(output_dir, "summaries")
     os.makedirs(summary_dir, exist_ok=True)
     summary_path = os.path.join(summary_dir, f"{query}_summary.txt")
 
     with open(summary_path, "w", encoding="utf-8") as f:
-        f.write(f"Summarized by Gemini: ")
-        f.write(summary)
-        f.write("\n")
+        for post in posts:
+            record = {
+                "Author": post.get("author_handle"),
+                "Created:": post.get("created_at"),
+                "Text": post.get("text"),
+                "Summary": post.get("summary")
+            }
+            f.write(json.dumps(record) + "\n")
 
     print(f"Summary saved to {summary_path}")
 
+def loadProcessedPosts(processed_dir: str, query: str) -> list[dict]:
+    pattern = os.path.join(processed_dir, f"bluesky_{query}_*.jsonl")
+    files = sorted(glob.glob(pattern))
+ 
+    if not files:
+        print(f"  No files found for query '{query}' in {processed_dir}")
+        return []
+ 
+    posts = []
+    for path in files:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    posts.append(json.loads(line))
+ 
+    print(f"  Loaded {len(posts)} posts from {len(files)} file(s) for query '{query}'")
+    return posts
+ 
+ 
+def runSummarization(geminiAPIkey: str, output_dir: str, processed_dir: str):
+    for query in QUERIES:
+        print(f"\nSummarizing query: {query}")
+        processed = loadProcessedPosts(processed_dir, query)
+ 
+        if not processed:
+            continue
+ 
+        for i, post in enumerate(processed[:1], 1):
+            post["summary"] = summarize(geminiAPIkey, post)
+            print(f"  [{i}/{len(processed)}] {post['summary'][:80] or '(no text, skipped)'}")
+            time.sleep(1)
+ 
+        saveSummary(processed, output_dir, query)
+ 
+    print("\nAll summaries done.")
+
 def main():
-    handle = input("Enter your Bluesky handle (e.g. yourname.bsky.social): ")
-    password = getpass("Enter your Bluesky app password: ")
 
-    token = login(handle, password)
-    if not token:
-        return
+    skipCrawl = input("Skip crawling and just summarize existing posts? (y/n): ").strip().lower() == "y"
 
-    output_dir = input("Enter output directory: ")
-    raw_dir = os.path.join(output_dir, "raw")
-    summary_dir = os.path.join(output_dir, "summaries")
+    if skipCrawl:
+        processed_dir = input("Enter directory of processed posts: ")
+        output_dir = input("Enter output directory for summaries: ")
+        geminiAPIkey = input("Enter your Gemini API key: ").strip()
 
-    geminiAPIkey = input("Enter your Gemini API key: ").strip()
+        runSummarization(geminiAPIkey, output_dir, processed_dir)
+
+    else:
+        handle = input("Enter your Bluesky handle (e.g. yourname.bsky.social): ")
+        password = getpass("Enter your Bluesky app password: ")
+
+        token = login(handle, password)
+        if not token:
+            return
+
+        output_dir = input("Enter output directory: ")
+        raw_dir = os.path.join(output_dir, "raw")
+
+        geminiAPIkey = input("Enter your Gemini API key: ").strip()
 
     
-    for query in QUERIES:
-        raw_posts_list = []
-        processed = []
+        for query in QUERIES:
+            raw_posts_list = []
+            processed = []
 
-        print(f"\nStarting query: {query}")
-        raw_posts = fetch_posts(token, query, TARGET_SIZE, handle, password)
+            print(f"\nStarting query: {query}")
+            raw_posts = fetch_posts(token, query, TARGET_SIZE, handle, password)
 
-        for post in raw_posts:
-            raw_posts_list.append(post)
-            extract_urls(post)
-            processed.append(process_post(post))
+            for post in raw_posts:
+                raw_posts_list.append(post)
+                extract_urls(post)
+                processed.append(process_post(post))
         
-        fetch_titles(processed)
-        save_posts(processed, output_dir, query)
-        save_raw_posts(raw_posts_list, raw_dir, query)
-        print(f"Finished query: {query}")
+            fetch_titles(processed)
+            save_posts(processed, output_dir, query)
+            save_raw_posts(raw_posts_list, raw_dir, query)
+            print(f"Finished query: {query}")
 
-        if geminiAPIkey:
-            print(f"Summarizing posts for query: {query}")
-            summary = summarize(geminiAPIkey, query, processed)
-            saveSummary(summary, summary_dir, query)
+            if geminiAPIkey:
+                print(f"Summarizing posts for query: {query}")
+
+                for i, post in enumerate(processed,1):
+                    post["summary"] = summarize(geminiAPIkey, post)
+                    print(f"Summarized {i}/{len(processed)} posts...")
+            
+                saveSummary(processed, output_dir, query)
     
     print("\nAll queries done.")
 
