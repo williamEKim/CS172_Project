@@ -36,7 +36,7 @@ def summarize(apiKey, query, posts: list[dict]) -> str:
         return "No text to summarize"
     
     postBlock = "\n".join(lines)
-    prompt = (f"Summarize the following posts about {query} in 3 sentences:\n\n{postBlock}")
+    prompt = (f"Summarize the most important parts of the following posts about {query} in 5 bulletpoints:\n\n{postBlock}")
 
     payload = {
         "contents": [
