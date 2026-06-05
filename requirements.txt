@@ -1,13 +1,15 @@
 beautifulsoup4==4.14.3
 bs4==0.0.2
-certifi==2026.4.22
+build==1.5.0
+certifi==2026.5.20
 charset-normalizer==3.4.7
-idna==3.13
-praw==7.8.1
-prawcore==2.4.0
-requests==2.33.1
-soupsieve==2.8.3
+idna==3.18
+JCC @ file:///usr/src/pylucene/jcc/dist/jcc-3.15-cp314-cp314-linux_aarch64.whl#sha256=8e885ffdff636c876678e25e1fe45732ab80a82ac299f50d99c72748b7ca7902
+lucene @ file:///usr/src/pylucene/dist/lucene-10.0.0-cp314-cp314-linux_aarch64.whl#sha256=38ad154117e1f0022a7f52dc934c0beeb50c16bb4b716e214f86dc450bdf4b70
+packaging==26.2
+pyproject_hooks==1.2.0
+requests==2.34.2
+setuptools==82.0.1
+soupsieve==2.8.4
 typing_extensions==4.15.0
-update-checker==0.18.0
-urllib3==2.6.3
-websocket-client==1.9.0
+urllib3==2.7.0

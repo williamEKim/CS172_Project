@@ -118,7 +118,7 @@ def runSummarization(geminiAPIkey: str, output_dir: str, processed_dir: str):
         for i, post in enumerate(processed[:1], 1):
             post["summary"] = summarize(geminiAPIkey, post)
             print(f"  [{i}/{len(processed)}] {post['summary'][:80] or '(no text, skipped)'}")
-            time.sleep(1)
+            time.sleep(10)
  
         saveSummary(processed, output_dir, query)
  
