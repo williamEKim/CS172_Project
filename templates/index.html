@@ -1,78 +1,157 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bluesky Sports Search</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bluesky Sports Search</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; color: #111; }
+    header { background: #0560ff; color: white; padding: 1.5rem 2rem; }
+    header h1 { font-size: 1.4rem; font-weight: 600; }
+    header p { font-size: 0.85rem; opacity: 0.8; margin-top: 4px; }
+    .container { max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+
+    .search-box { background: white; border-radius: 10px; padding: 1.25rem; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 1rem; }
+    .search-row { display: flex; gap: 8px; }
+    .search-row input[type="text"] { flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; outline: none; }
+    .search-row input[type="text"]:focus { border-color: #0560ff; }
+    .search-row button { padding: 10px 20px; background: #0560ff; color: white; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; }
+    .search-row button:hover { background: #0448cc; }
+
+    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; align-items: center; }
+    .filters label { font-size: 13px; color: #555; }
+    .filters select, .filters input[type="number"], .filters input[type="date"] {
+      padding: 5px 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 13px; outline: none;
+    }
+    .filters select:focus, .filters input:focus { border-color: #0560ff; }
+
+    #status { font-size: 13px; color: #666; margin-bottom: 0.75rem; min-height: 20px; }
+    #results { display: flex; flex-direction: column; gap: 10px; }
+
+    .result-card { background: white; border-radius: 8px; padding: 1rem 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.07); border-left: 3px solid #0560ff; }
+    .result-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+    .result-rank { font-size: 12px; font-weight: 600; color: #0560ff; }
+    .result-score { font-size: 12px; color: #888; }
+    .result-author { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 4px; }
+    .result-handle { font-size: 12px; color: #888; }
+    .result-text { font-size: 14px; color: #222; line-height: 1.5; margin: 8px 0; }
+    .result-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #999; margin-top: 6px; }
+    .result-meta span { display: flex; align-items: center; gap: 3px; }
+    .result-url { font-size: 12px; color: #0560ff; margin-top: 6px; word-break: break-all; }
+
+    .no-results { text-align: center; color: #888; padding: 2rem; font-size: 14px; }
+    .error { color: #c0392b; font-size: 14px; padding: 1rem; background: #fdf0ef; border-radius: 6px; }
+  </style>
 </head>
 <body>
-
-<header>
+  <header>
     <h1>Bluesky Sports Search</h1>
-    <p>Search posts collected across 22 sports topics</p>
-</header>
+    <p>CS172 Project Group 18</p>
+  </header>
 
-<main>
-    <div class="search-panel">
-        <form id="search-form" autocomplete="off">
-            <div class="search-bar">
-                <input
-                    type="text"
-                    id="query"
-                    placeholder="e.g. volleyball tournament, NBA trade…"
-                    spellcheck="false"
-                >
-                <button type="submit" id="submit-btn">Search</button>
-            </div>
-
-            <div class="options-row">
-                <div class="option-group">
-                    <label for="mode">Search across</label>
-                    <select id="mode">
-                        <option value="multi">Post text + author + link titles</option>
-                        <option value="text">Post text only</option>
-                    </select>
-                </div>
-                <div class="option-group">
-                    <label for="sort">Sort by</label>
-                    <select id="sort">
-                        <option value="score">Relevance</option>
-                        <option value="date">Most recent</option>
-                        <option value="likes">Most liked</option>
-                        <option value="reposts">Most reposted</option>
-                    </select>
-                </div>
-            </div>
-
-            <details class="filters">
-                <summary>Advanced filters</summary>
-                <div class="filter-grid">
-                    <div class="filter-group">
-                        <label for="min_likes">Min likes</label>
-                        <input type="number" id="min_likes" min="0" value="0">
-                    </div>
-                    <div class="filter-group">
-                        <label for="min_reposts">Min reposts</label>
-                        <input type="number" id="min_reposts" min="0" value="0">
-                    </div>
-                    <div class="filter-group">
-                        <label for="date_from">From date</label>
-                        <input type="date" id="date_from">
-                    </div>
-                    <div class="filter-group">
-                        <label for="date_to">To date</label>
-                        <input type="date" id="date_to">
-                    </div>
-                </div>
-            </details>
-        </form>
+  <div class="container">
+    <div class="search-box">
+      <div class="search-row">
+        <input type="text" id="query" placeholder="e.g. darts tournament, basketball game..." />
+        <button onclick="doSearch()">Search</button>
+      </div>
+      <div class="filters">
+        <label>Mode:
+          <select id="mode">
+            <option value="multi">Multi-field</option>
+            <option value="single">Text only</option>
+          </select>
+        </label>
+        <label>Sort:
+          <select id="sort">
+            <option value="score">Relevance</option>
+            <option value="date">Date</option>
+            <option value="likes">Likes</option>
+          </select>
+        </label>
+        <label>Min likes:
+          <input type="number" id="min_likes" value="0" min="0" style="width:60px" />
+        </label>
+        <label>Min reposts:
+          <input type="number" id="min_reposts" value="0" min="0" style="width:60px" />
+        </label>
+        <label>From:
+          <input type="date" id="date_from" />
+        </label>
+        <label>To:
+          <input type="date" id="date_to" />
+        </label>
+      </div>
     </div>
 
-    <div id="results-header"></div>
-    <div id="results-list"></div>
-</main>
+    <div id="status"></div>
+    <div id="results"></div>
+  </div>
 
-<script src="/static/app.js"></script>
+  <script>
+    document.getElementById("query").addEventListener("keydown", e => {
+      if (e.key === "Enter") doSearch();
+    });
+
+    async function doSearch() {
+      const q = document.getElementById("query").value.trim();
+      if (!q) return;
+
+      const mode = document.getElementById("mode").value;
+      const sort = document.getElementById("sort").value;
+      const min_likes = document.getElementById("min_likes").value;
+      const min_reposts = document.getElementById("min_reposts").value;
+      const date_from = document.getElementById("date_from").value;
+      const date_to = document.getElementById("date_to").value;
+
+      document.getElementById("status").textContent = "Searching...";
+      document.getElementById("results").innerHTML = "";
+
+      const params = new URLSearchParams({ q, mode, sort, min_likes, min_reposts });
+      if (date_from) params.append("date_from", date_from + "T00:00:00Z");
+      if (date_to) params.append("date_to", date_to + "T23:59:59Z");
+
+      try {
+        const res = await fetch("/api/search?" + params);
+        const data = await res.json();
+
+        if (data.error) {
+          document.getElementById("results").innerHTML = `<div class="error">Error: ${data.error}</div>`;
+          document.getElementById("status").textContent = "";
+          return;
+        }
+
+        document.getElementById("status").textContent =
+          data.length === 0 ? "No results found." : `Showing ${data.length} results`;
+
+        document.getElementById("results").innerHTML = data.map((r, i) => `
+          <div class="result-card">
+            <div class="result-header">
+              <span class="result-rank">#${i + 1}</span>
+              <span class="result-score">Score: ${r.score.toFixed(4)}</span>
+            </div>
+            <div class="result-author">${r.author_display_name || r.author_handle}
+              <span class="result-handle">@${r.author_handle}</span>
+            </div>
+            <div class="result-text">${r.text || "(no text)"}</div>
+            <div class="result-meta">
+              <span>🕐 ${r.created_at ? r.created_at.slice(0, 10) : "unknown"}</span>
+              <span>❤️ ${r.like_count || 0}</span>
+              <span>🔁 ${r.repost_count || 0}</span>
+              <span>💬 ${r.reply_count || 0}</span>
+              ${r.is_reply === "True" ? "<span>↩ reply</span>" : ""}
+            </div>
+            ${r.url ? `<div class="result-url"><a href="${r.url}" target="_blank">${r.url}</a></div>` : ""}
+            ${r.title_list && r.title_list.length ? `<div class="result-url">🔗 ${r.title_list[0]}</div>` : ""}
+          </div>
+        `).join("");
+
+      } catch (err) {
+        document.getElementById("results").innerHTML = `<div class="error">Request failed: ${err}</div>`;
+        document.getElementById("status").textContent = "";
+      }
+    }
+  </script>
 </body>
 </html>

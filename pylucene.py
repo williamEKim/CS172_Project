@@ -3,6 +3,7 @@ import os, shutil, json
 import time
 from datetime import datetime, timezone
 from java.nio.file import Paths
+from java.lang import Integer
 from org.apache.lucene.analysis.standard import StandardAnalyzer
 from org.apache.lucene.document import Document, Field, FieldType, LongPoint, IntPoint, StoredField  
 from org.apache.lucene.index import IndexWriter, IndexWriterConfig, IndexOptions, DirectoryReader
@@ -184,43 +185,48 @@ def multifield_search(index_dir, query):
     return top_k_docs
 
 
-def advanced_search(index_dir, query_str, mode="multi", sort_by="score",
-                    min_likes=0, min_reposts=0, date_from=None, date_to=None, limit=50):
+def advanced_search(index_dir, query, mode="multi", sort_by="score",
+                    min_likes=0, min_reposts=0, date_from=None, date_to=None, limit=10):
+    from org.apache.lucene.search import BooleanQuery, BooleanClause
+    from org.apache.lucene.document import LongPoint, IntPoint
+
     store = NIOFSDirectory(Paths.get(index_dir))
     reader = DirectoryReader.open(store)
     searcher = IndexSearcher(reader)
+    stored_fields = searcher.storedFields()
 
-    MUST = BooleanClause.Occur.MUST
-    FILTER = BooleanClause.Occur.FILTER
-    builder = BooleanQuery.Builder()
-
-    if query_str.strip():
-        if mode == "multi":
-            fields = ["author_display_name", "text", "link_title"]
-            SHOULD = BooleanClause.Occur.SHOULD
-            text_q = MultiFieldQueryParser.parse(
-                query_str, fields, [SHOULD, SHOULD, SHOULD], StandardAnalyzer()
-            )
-        else:
-            text_q = QueryParser("text", StandardAnalyzer()).parse(query_str)
-        builder.add(text_q, MUST)
+    # Build the main text query based on mode
+    if mode == "multi":
+        fields = ["text", "author_display_name", "link_title"]
+        SHOULD = BooleanClause.Occur.SHOULD
+        text_query = MultiFieldQueryParser.parse(
+            query, fields, [SHOULD, SHOULD, SHOULD], StandardAnalyzer()
+        )
     else:
-        builder.add(MatchAllDocsQuery(), MUST)
+        parser = QueryParser("text", StandardAnalyzer())
+        text_query = parser.parse(query)
 
-    if date_from or date_to:
-        lo = parse_epoch(date_from + "T00:00:00Z") if date_from else 0
-        hi = parse_epoch(date_to + "T23:59:59Z") if date_to else 9223372036854775807
-        builder.add(LongPoint.newRangeQuery("created_at_epoch", lo, hi), FILTER)
+    # Combine with numeric filters using BooleanQuery
+    builder = BooleanQuery.Builder()
+    builder.add(text_query, BooleanClause.Occur.MUST)
 
     if min_likes > 0:
-        builder.add(IntPoint.newRangeQuery("like_count_int", min_likes, 2147483647), FILTER)
+        builder.add(IntPoint.newRangeQuery("like_count_int", min_likes, Integer.MAX_VALUE),
+                    BooleanClause.Occur.FILTER)
 
     if min_reposts > 0:
-        builder.add(IntPoint.newRangeQuery("repost_count_int", min_reposts, 2147483647), FILTER)
+        builder.add(IntPoint.newRangeQuery("repost_count_int", min_reposts, Integer.MAX_VALUE),
+                    BooleanClause.Occur.FILTER)
 
-    top_docs = searcher.search(builder.build(), limit).scoreDocs
+    if date_from or date_to:
+        epoch_from = parse_epoch(date_from) if date_from else 0
+        epoch_to = parse_epoch(date_to) if date_to else 9999999999
+        builder.add(LongPoint.newRangeQuery("created_at_epoch", epoch_from, epoch_to),
+                    BooleanClause.Occur.FILTER)
 
-    stored_fields = searcher.storedFields()
+    final_query = builder.build()
+    top_docs = searcher.search(final_query, limit).scoreDocs
+
     results = []
     for hit in top_docs:
         doc = stored_fields.document(hit.doc)
@@ -249,13 +255,11 @@ def advanced_search(index_dir, query_str, mode="multi", sort_by="score",
     reader.close()
 
     if sort_by == "date":
-        results.sort(key=lambda x: int(x["created_at_epoch"] or 0), reverse=True)
+        results.sort(key=lambda x: x["created_at_epoch"] or "0", reverse=True)
     elif sort_by == "likes":
         results.sort(key=lambda x: int(x["like_count"] or 0), reverse=True)
-    elif sort_by == "reposts":
-        results.sort(key=lambda x: int(x["repost_count"] or 0), reverse=True)
-    else:
-        results.sort(key=lambda x: (x["score"], int(x["created_at_epoch"] or 0)), reverse=True)
+    else:  # default: score
+        results.sort(key=lambda x: x["score"], reverse=True)
 
     return results
 
