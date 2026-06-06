@@ -2,7 +2,7 @@ services:
   app:
     build: .
     ports:
-      - "5000:5000"
+      - "5001:5001"
     volumes:
       - ./processed:/app/processed
       - ./bluesky_index:/app/bluesky_index

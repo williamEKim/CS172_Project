@@ -54,4 +54,4 @@ if __name__ == "__main__":
     if not os.path.exists(INDEX_DIR):
         posts = load_posts(DATA_DIR)
         create_index(INDEX_DIR, posts)
-    app.run(host='0.0.0.0', debug=True, use_reloader=False)
+    app.run(host='0.0.0.0', debug=True, use_reloader=False, port=5001)
