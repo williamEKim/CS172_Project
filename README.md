@@ -87,7 +87,7 @@ Some limits of the system currently include:
 - A [Bluesky]([url](https://bsky.app/)) account (for crawling)
 - (Optional) A [Gemini API]([url](https://aistudio.google.com/welcome?utm_source=google&utm_medium=cpc&utm_campaign=Cloud-SS-DR-AIS-FY26-global-gsem-1713578&utm_content=text-ad&utm_term=KW_gemini%20api%20key&gad_source=1&gad_campaignid=23417416052&gbraid=0AAAAACn9t65KrvyNXONTuYgfK2idIYjF9&gclid=Cj0KCQjw54nRBhDCARIsAMcY_SA1ViVEvq1umSotTn8u1JHPeN4BHUDWSM1q2jXEn0j4pRufGHZRBS0aAsBMEALw_wcB)) key (for summarization)
 
-### (Option) Step 1 — Web Crawling and Processing Data
+### (Optional) Step 1 — Web Crawling and Processing Data
 
 Since we have already executed the web-crawler and pre-processed the collected data (they are all in the repo), **this step is optional for the demo/testing**.
 
