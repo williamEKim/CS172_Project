@@ -50,7 +50,7 @@ The search algorithm supports two modes: `multi-field search` and `single-field 
 - In multi-field mode, the user query is searched across the fields author_display_name, text, and link_title. A document is retrieved if the user's query matches any of these fields.
 - In single field mode, the user query is searched over the text field only.
 
-Users can also refine their searches by applying filters such as a date range, minimum like count, and minimum repost count. The retrieved documents are then ranked using BM25. The results are returned in descending order based on the user’s selected sorting method.
+Users can also refine their searches by applying filters such as a date range, minimum like count, and minimum repost count. The retrieved documents are then ranked using BM25. The results are returned in descending order based on the user's selected sorting method.
 
 The web interface supports:
 
@@ -64,9 +64,7 @@ The web interface supports:
 
 ### LLM Summarization (Extra Credit)
 
-- `main.py` integrates with the Gemini 2.0 Flash API to generate 5-bullet summaries of collected posts. 
-- Summaries are saved to `/summaries/{query}_summary.txt`. 
-- This feature can be run independently over existing processed data using the skip-crawling option in `main.py`.
+LLM summarization uses Google’s Gemini API. The summarization itself is dictated by the prompt passed into the API to compress each query post into 5 bulletpoints. We added new functionality to the crawler’s code which allows users to skip the crawling process and jump straight to the summarization process. The console prompts the user for the directory of the JSON files for each post, desired directory for where the summarizations should be saved, and Gemini API key. The summarization goes through each query and for each query, it handles each post before moving on to the next query. Summarizations are stored via text file and saved into the directory defined by the user.
 
 ---
 
@@ -83,11 +81,38 @@ Some limits of the system currently include:
 
 ### Prerequisites
 
-- [Docker Desktop]([url](https://www.docker.com/products/docker-desktop/)) installed and running
-- A [Bluesky]([url](https://bsky.app/)) account (for crawling)
-- (Optional) A [Gemini API]([url](https://aistudio.google.com/welcome?utm_source=google&utm_medium=cpc&utm_campaign=Cloud-SS-DR-AIS-FY26-global-gsem-1713578&utm_content=text-ad&utm_term=KW_gemini%20api%20key&gad_source=1&gad_campaignid=23417416052&gbraid=0AAAAACn9t65KrvyNXONTuYgfK2idIYjF9&gclid=Cj0KCQjw54nRBhDCARIsAMcY_SA1ViVEvq1umSotTn8u1JHPeN4BHUDWSM1q2jXEn0j4pRufGHZRBS0aAsBMEALw_wcB)) key (for summarization)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- A [Bluesky](https://bsky.app/) account (for crawling)
+- (Optional) A [Gemini API](https://aistudio.google.com/) key (for summarization)
 
-### (Optional) Step 1 — Web Crawling and Processing Data
+---
+
+### Option 1: One-Touch Execution (Recommended)
+
+Since the data is already collected and pre-processed in the repo, you only need Docker Desktop running. The script builds the index and launches the web interface automatically.
+
+**Mac/Linux:**
+```bash
+bash indexer.sh processed
+```
+
+**Windows:**
+```bat
+indexer.bat processed
+```
+
+Then open your browser and go to:
+```
+http://localhost:5001
+```
+
+> **Note:** If port 5001 is already in use, change the port mapping in `docker-compose.yml` (e.g. `5002:5001`) and access the corresponding port.
+
+---
+
+### Option 2: Manual Setup
+
+#### (Optional) Step 1 — Web Crawling and Processing Data
 
 Since we have already executed the web-crawler and pre-processed the collected data (they are all in the repo), **this step is optional for the demo/testing**.
 
@@ -101,20 +126,20 @@ python3 main.py
 
 You will be prompted for your Bluesky handle, app password, and output directory. Processed posts are saved to `processed/`.
 
-### Step 2 — Start the Docker Container
+#### Step 2 — Start the Docker Container
 
 **Mac/Linux:**
 ```bash
 cd /path/to/Project_Repo
-docker run -it -v "$(pwd):/app" -p 5000:5000 coady/pylucene bash
+docker run -it -v "$(pwd):/app" -p 5001:5001 coady/pylucene bash
 ```
 
 **Windows:**
 ```bat
-docker run -it -v "%cd%:/app" -p 5000:5000 coady/pylucene bash
+docker run -it -v "%cd%:/app" -p 5001:5001 coady/pylucene bash
 ```
 
-### Step 3 — Build The Index (first time only)
+#### Step 3 — Build The Index (first time only)
 
 Inside the container:
 ```bash
@@ -124,7 +149,7 @@ python3 pylucene.py
 
 This creates `bluesky_index/` in your project folder. Skip this step on subsequent runs if the index already exists.
 
-### Step 4 — Run The Flask App
+#### Step 4 — Run The Flask App
 
 Inside the container:
 ```bash
@@ -132,20 +157,18 @@ pip install flask
 python3 app.py
 ```
 
-### Step 5 — Open The Search Web-Interface
+#### Step 5 — Open The Search Web-Interface
 
 Open your browser and go to:
 ```
-http://localhost:5000
+http://localhost:5001
 ```
-
-> **Note:** If port 5000 is already in use, change the `-p` flag (e.g. `-p 5001:5000`) and access the corresponding port in your browser.
 
 ---
 
-## Automated Scripts
+## Crawler Scripts
 
-As an alternative to manual setup, use the provided scripts to handle environment setup and crawling:
+To re-collect data from Bluesky:
 
 **Mac/Linux:**
 ```bash
@@ -157,18 +180,6 @@ source crawler.sh
 ```bat
 cd crawler/
 crawler.bat
-```
-
-For the indexer specifically:
-
-**Mac/Linux:**
-```bash
-source indexer.sh
-```
-
-**Windows:**
-```bat
-indexer.bat
 ```
 
 ---
@@ -199,7 +210,7 @@ pip freeze > requirements.txt
 PyLucene cannot be installed via pip. Use the Docker container as described above.
 
 **Port already in use:**
-Change the host port in the `docker run` command: `-p 5001:5000` and access `localhost:5001`.
+Change the port mapping in `docker-compose.yml` (e.g. `5002:5001`) and access `localhost:5002`. On Mac, port 5000 is reserved by AirPlay Receiver.
 
 **`No .jsonl files found in processed/`:**
 Run `main.py` first to collect and process posts before running the indexer.
